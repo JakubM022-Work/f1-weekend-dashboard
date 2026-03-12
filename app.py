@@ -323,13 +323,6 @@ if st.sidebar.button("Załaduj dashboard"):
             race_results = load_session_results(season, round_number, "R")
             race_laps = load_race_laps(season, round_number)
 
-        st.write("Quali columns:", list(quali_results.columns))
-        st.write("Race columns:", list(race_results.columns))
-        st.write("Quali preview:")
-        st.dataframe(quali_results.head())
-        st.write("Race preview:")
-        st.dataframe(race_results.head())
-
         st.subheader(f"{event_name} ({season})")
 
 
