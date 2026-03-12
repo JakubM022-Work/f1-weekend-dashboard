@@ -505,11 +505,20 @@ if st.sidebar.button("Załaduj dashboard"):
         with tab4:
             st.markdown('<div class="section-title">Strategie opon</div>', unsafe_allow_html=True)
             st.caption("Każdy pasek pokazuje długość kolejnych stintów kierowcy podczas wyścigu.")
+            st.markdown("""
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+                <span style="background:#FF4D4D; color:#111; padding:6px 10px; border-radius:999px; font-weight:700;">Soft</span>
+                <span style="background:#FFD54A; color:#111; padding:6px 10px; border-radius:999px; font-weight:700;">Medium</span>
+                <span style="background:#F5F5F5; color:#111; padding:6px 10px; border-radius:999px; font-weight:700;">Hard</span>
+                <span style="background:#43A047; color:white; padding:6px 10px; border-radius:999px; font-weight:700;">Intermediate</span>
+                <span style="background:#1E88E5; color:white; padding:6px 10px; border-radius:999px; font-weight:700;">Wet</span>
+            </div>
+            """, unsafe_allow_html=True)
 
             fig = plot_stints(stint_data)
 
             if fig is not None:
-                st.pyplot(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.info("Brak danych stintów do wyświetlenia.")
 
