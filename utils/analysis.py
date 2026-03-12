@@ -230,3 +230,27 @@ def build_position_delta(started, finished):
         return f"P{int(started)} → P{int(finished)}"
     except Exception:
         return "—"
+
+def get_quick_stats(race_results: pd.DataFrame, stint_data: pd.DataFrame):
+    drivers_count = 0
+    stints_count = 0
+    classified_finishers = 0
+
+    if race_results is not None and not race_results.empty:
+        if "Driver" in race_results.columns:
+            drivers_count = race_results["Driver"].nunique()
+        elif "FullName" in race_results.columns:
+            drivers_count = race_results["FullName"].nunique()
+
+        if "Status" in race_results.columns:
+            status_series = race_results["Status"].astype(str).str.lower()
+            classified_finishers = status_series.str.contains("finished|lapped").sum()
+
+    if stint_data is not None and not stint_data.empty:
+        stints_count = len(stint_data)
+
+    return {
+        "drivers_count": int(drivers_count),
+        "stints_count": int(stints_count),
+        "classified_finishers": int(classified_finishers),
+    }
