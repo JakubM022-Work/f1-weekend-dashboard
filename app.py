@@ -21,40 +21,49 @@ st.title("🏎️ F1 Weekend Dashboard")
 st.write("Mini dashboard weekendu F1 zbudowany w Pythonie przy użyciu FastF1 i Streamlit.")
 
 
-
 # =========================
 # Helpers
 # =========================
 def format_timedelta(value):
-    if pd.isna(value):
+    if value is None or pd.isna(value):
         return ""
-    if not isinstance(value, pd.Timedelta):
-        return str(value)
+    if isinstance(value, pd.Timedelta):
+        total_ms = int(value.total_seconds() * 1000)
+        minutes = total_ms // 60000
+        seconds = (total_ms % 60000) // 1000
+        milliseconds = total_ms % 1000
+        return f"{minutes}:{seconds:02d}.{milliseconds:03d}"
+    return str(value)
 
-    total_ms = int(value.total_seconds() * 1000)
-    minutes = total_ms // 60000
-    seconds = (total_ms % 60000) // 1000
-    milliseconds = total_ms % 1000
-    return f"{minutes}:{seconds:02d}.{milliseconds:03d}"
+
+def safe_plain_df(df_like, columns=None) -> pd.DataFrame:
+    """
+    Zamienia obiekty FastF1/Pandas na zwykły pandas.DataFrame,
+    zachowując tylko wskazane kolumny.
+    """
+    if df_like is None:
+        return pd.DataFrame()
+
+    df = df_like.copy()
+
+    if columns is not None:
+        existing_cols = [col for col in columns if col in df.columns]
+        df = df[existing_cols].copy()
+
+    # Najstabilniejsza konwersja dla obiektów FastF1
+    records = df.to_dict(orient="records")
+    return pd.DataFrame(records)
 
 
 def get_event_schedule(year: int) -> pd.DataFrame:
-    """
-    Harmonogram zamieniamy na zwykły DataFrame, bo to właśnie tutaj
-    wcześniej sypał się błąd ze Streamlit/cache.
-    """
     schedule = fastf1.get_event_schedule(year)
-    schedule = pd.DataFrame(schedule).copy()
-    return schedule
+    return pd.DataFrame(schedule).copy()
 
 
 @st.cache_data(show_spinner=False)
 def load_session_results(year: int, round_number: int, session_code: str) -> pd.DataFrame:
     session = fastf1.get_session(year, round_number, session_code)
     session.load()
-
-    # NIE konwertujemy ponownie przez pd.DataFrame(...)
-    results = session.results.copy()
 
     wanted_cols = [
         "Position",
@@ -68,9 +77,8 @@ def load_session_results(year: int, round_number: int, session_code: str) -> pd.
         "Status",
         "Points",
     ]
-    existing_cols = [col for col in wanted_cols if col in results.columns]
-    results = results[existing_cols].copy()
 
+    results = safe_plain_df(session.results, wanted_cols)
     return results
 
 
@@ -79,18 +87,21 @@ def load_race_laps(year: int, round_number: int) -> pd.DataFrame:
     race = fastf1.get_session(year, round_number, "R")
     race.load()
 
-    # NIE konwertujemy przez pd.DataFrame(...)
-    laps = race.laps.copy()
-
+    wanted_cols = ["Driver", "Stint", "Compound", "LapNumber"]
+    laps = safe_plain_df(race.laps, wanted_cols)
     return laps
 
 
 def prepare_qualifying_top10(quali_results: pd.DataFrame) -> pd.DataFrame:
+    if quali_results.empty:
+        return pd.DataFrame()
+
     df = quali_results.copy()
 
     if "Position" in df.columns:
         df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
-        df = df.dropna(subset=["Position"]).sort_values("Position").head(10)
+        df = df[df["Position"].notna()].copy()
+        df = df.sort_values("Position").head(10)
 
     for col in ["Q1", "Q2", "Q3"]:
         if col in df.columns:
@@ -105,15 +116,19 @@ def prepare_qualifying_top10(quali_results: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns=rename_map)
 
     preferred_order = [col for col in ["Pos", "Driver", "Code", "Team", "Q1", "Q2", "Q3"] if col in df.columns]
-    return df[preferred_order]
+    return df[preferred_order].reset_index(drop=True)
 
 
 def prepare_race_top10(race_results: pd.DataFrame) -> pd.DataFrame:
+    if race_results.empty:
+        return pd.DataFrame()
+
     df = race_results.copy()
 
     if "Position" in df.columns:
         df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
-        df = df.dropna(subset=["Position"]).sort_values("Position").head(10)
+        df = df[df["Position"].notna()].copy()
+        df = df.sort_values("Position").head(10)
 
     if "GridPosition" in df.columns:
         df["GridPosition"] = pd.to_numeric(df["GridPosition"], errors="coerce")
@@ -131,10 +146,13 @@ def prepare_race_top10(race_results: pd.DataFrame) -> pd.DataFrame:
     df = df.rename(columns=rename_map)
 
     preferred_order = [col for col in ["Pos", "Driver", "Code", "Team", "Grid", "Points", "Status"] if col in df.columns]
-    return df[preferred_order]
+    return df[preferred_order].reset_index(drop=True)
 
 
 def calculate_position_changes(race_results: pd.DataFrame) -> pd.DataFrame:
+    if race_results.empty:
+        return pd.DataFrame()
+
     df = race_results.copy()
 
     required_cols = {"Position", "GridPosition", "FullName", "Abbreviation", "TeamName"}
@@ -144,9 +162,11 @@ def calculate_position_changes(race_results: pd.DataFrame) -> pd.DataFrame:
 
     df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
     df["GridPosition"] = pd.to_numeric(df["GridPosition"], errors="coerce")
-    df = df.dropna(subset=["Position", "GridPosition"]).copy()
+    df = df[df["Position"].notna() & df["GridPosition"].notna()].copy()
 
-    # dodatnia wartość = zyskane pozycje
+    if df.empty:
+        return pd.DataFrame()
+
     df["PositionsChanged"] = df["GridPosition"] - df["Position"]
 
     df = df.rename(
@@ -162,10 +182,13 @@ def calculate_position_changes(race_results: pd.DataFrame) -> pd.DataFrame:
     result = df[["Driver", "Code", "Team", "Started", "Finished", "PositionsChanged"]].copy()
     result = result.sort_values("PositionsChanged", ascending=False)
 
-    return result
+    return result.reset_index(drop=True)
 
 
 def prepare_stint_data(laps: pd.DataFrame) -> pd.DataFrame:
+    if laps.empty:
+        return pd.DataFrame()
+
     cols_needed = ["Driver", "Stint", "Compound", "LapNumber"]
     existing = [c for c in cols_needed if c in laps.columns]
 
@@ -173,23 +196,30 @@ def prepare_stint_data(laps: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = laps[existing].copy()
-    df = df.dropna(subset=["Driver", "Stint", "Compound", "LapNumber"])
+    df = df[
+        df["Driver"].notna()
+        & df["Stint"].notna()
+        & df["Compound"].notna()
+        & df["LapNumber"].notna()
+    ].copy()
 
     df["LapNumber"] = pd.to_numeric(df["LapNumber"], errors="coerce")
     df["Stint"] = pd.to_numeric(df["Stint"], errors="coerce")
-    df = df.dropna(subset=["LapNumber", "Stint"])
+    df = df[df["LapNumber"].notna() & df["Stint"].notna()].copy()
+
+    if df.empty:
+        return pd.DataFrame()
 
     stints = (
-        df.groupby(["Driver", "Stint", "Compound"])
+        df.groupby(["Driver", "Stint", "Compound"], as_index=False)
         .agg(
             StintLength=("LapNumber", "count"),
             FirstLap=("LapNumber", "min"),
         )
-        .reset_index()
         .sort_values(["Driver", "Stint"])
     )
 
-    return stints
+    return stints.reset_index(drop=True)
 
 
 def plot_stints(stints: pd.DataFrame):
@@ -257,7 +287,7 @@ try:
 
     race_events = schedule[schedule["RoundNumber"].notna()].copy()
     race_events["RoundNumber"] = pd.to_numeric(race_events["RoundNumber"], errors="coerce")
-    race_events = race_events.dropna(subset=["RoundNumber"]).copy()
+    race_events = race_events[race_events["RoundNumber"].notna()].copy()
     race_events = race_events[race_events["RoundNumber"] > 0].copy()
 
     race_events["RoundNumber"] = race_events["RoundNumber"].astype(int)
@@ -272,10 +302,7 @@ try:
         st.error("Brak dostępnych rund dla wybranego sezonu.")
         st.stop()
 
-    selected_label = st.sidebar.selectbox(
-        "Grand Prix",
-        options=event_labels
-    )
+    selected_label = st.sidebar.selectbox("Grand Prix", options=event_labels)
 
     selected_event = race_events[race_events["label"] == selected_label].iloc[0]
     round_number = int(selected_event["RoundNumber"])
@@ -296,7 +323,15 @@ if st.sidebar.button("Załaduj dashboard"):
             race_results = load_session_results(season, round_number, "R")
             race_laps = load_race_laps(season, round_number)
 
+        st.write("Quali columns:", list(quali_results.columns))
+        st.write("Race columns:", list(race_results.columns))
+        st.write("Quali preview:")
+        st.dataframe(quali_results.head())
+        st.write("Race preview:")
+        st.dataframe(race_results.head())
+
         st.subheader(f"{event_name} ({season})")
+
 
         col1, col2 = st.columns(2)
 
