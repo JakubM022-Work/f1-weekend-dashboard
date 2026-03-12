@@ -5,8 +5,8 @@ import fastf1
 
 from utils.loaders import get_event_schedule, load_session_results, load_race_laps
 from utils.analysis import (
-    prepare_qualifying_top10,
-    prepare_race_top10,
+    prepare_qualifying_top22,
+    prepare_race_top22,
     calculate_position_changes,
     prepare_stint_data,
     get_pole_sitter,
@@ -163,8 +163,8 @@ if st.sidebar.button("Załaduj dashboard"):
             race_results = load_session_results(season, round_number, "R")
             race_laps = load_race_laps(season, round_number)
 
-        quali_top10 = prepare_qualifying_top10(quali_results)
-        race_top10 = prepare_race_top10(race_results)
+        quali_top22 = prepare_qualifying_top22(quali_results)
+        race_top22 = prepare_race_top22(race_results)
         changes = calculate_position_changes(race_results)
         stint_data = prepare_stint_data(race_laps)
 
@@ -246,16 +246,16 @@ if st.sidebar.button("Załaduj dashboard"):
             col1, col2 = st.columns(2)
 
             with col1:
-                st.markdown('<div class="section-title">Top 10 kwalifikacji</div>', unsafe_allow_html=True)
-                if not quali_top10.empty:
-                    st.dataframe(quali_top10, use_container_width=True, hide_index=True)
+                st.markdown('<div class="section-title">Top 22 kwalifikacji</div>', unsafe_allow_html=True)
+                if not quali_top22.empty:
+                    st.dataframe(quali_top22, use_container_width=True, hide_index=True)
                 else:
                     st.info("Brak danych kwalifikacji do wyświetlenia.")
 
             with col2:
-                st.markdown('<div class="section-title">Top 10 wyścigu</div>', unsafe_allow_html=True)
-                if not race_top10.empty:
-                    st.dataframe(race_top10, use_container_width=True, hide_index=True)
+                st.markdown('<div class="section-title">Top 22 wyścigu</div>', unsafe_allow_html=True)
+                if not race_top22.empty:
+                    st.dataframe(race_top22, use_container_width=True, hide_index=True)
                 else:
                     st.info("Brak danych wyścigu do wyświetlenia.")
 
@@ -285,15 +285,15 @@ if st.sidebar.button("Załaduj dashboard"):
 
         with tab2:
             st.markdown('<div class="section-title">Wyniki kwalifikacji</div>', unsafe_allow_html=True)
-            if not quali_top10.empty:
-                st.dataframe(quali_top10, use_container_width=True, hide_index=True)
+            if not quali_top22.empty:
+                st.dataframe(quali_top22, use_container_width=True, hide_index=True)
             else:
                 st.info("Brak danych kwalifikacji do wyświetlenia.")
 
         with tab3:
             st.markdown('<div class="section-title">Wyniki wyścigu</div>', unsafe_allow_html=True)
-            if not race_top10.empty:
-                st.dataframe(race_top10, use_container_width=True, hide_index=True)
+            if not race_top22.empty:
+                st.dataframe(race_top22, use_container_width=True, hide_index=True)
             else:
                 st.info("Brak danych wyścigu do wyświetlenia.")
 

@@ -13,7 +13,7 @@ def format_timedelta(value):
     return str(value)
 
 
-def prepare_qualifying_top10(quali_results: pd.DataFrame) -> pd.DataFrame:
+def prepare_qualifying_top22(quali_results: pd.DataFrame) -> pd.DataFrame:
     if quali_results.empty:
         return pd.DataFrame()
 
@@ -22,7 +22,7 @@ def prepare_qualifying_top10(quali_results: pd.DataFrame) -> pd.DataFrame:
     if "Position" in df.columns:
         df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
         df = df[df["Position"].notna()].copy()
-        df = df.sort_values("Position").head(10)
+        df = df.sort_values("Position").head(22)
 
     for col in ["Q1", "Q2", "Q3"]:
         if col in df.columns:
@@ -40,7 +40,7 @@ def prepare_qualifying_top10(quali_results: pd.DataFrame) -> pd.DataFrame:
     return df[preferred_order].reset_index(drop=True)
 
 
-def prepare_race_top10(race_results: pd.DataFrame) -> pd.DataFrame:
+def prepare_race_top22(race_results: pd.DataFrame) -> pd.DataFrame:
     if race_results.empty:
         return pd.DataFrame()
 
@@ -49,7 +49,7 @@ def prepare_race_top10(race_results: pd.DataFrame) -> pd.DataFrame:
     if "Position" in df.columns:
         df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
         df = df[df["Position"].notna()].copy()
-        df = df.sort_values("Position").head(10)
+        df = df.sort_values("Position").head(22)
 
     if "GridPosition" in df.columns:
         df["GridPosition"] = pd.to_numeric(df["GridPosition"], errors="coerce")
