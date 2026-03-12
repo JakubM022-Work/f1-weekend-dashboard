@@ -141,3 +141,50 @@ def prepare_stint_data(laps: pd.DataFrame) -> pd.DataFrame:
     )
 
     return stints.reset_index(drop=True)
+
+def get_pole_sitter(quali_results: pd.DataFrame):
+    if quali_results.empty or "Position" not in quali_results.columns:
+        return None
+
+    df = quali_results.copy()
+    df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
+    df = df[df["Position"] == 1]
+
+    if df.empty:
+        return None
+
+    row = df.iloc[0]
+    return {
+        "driver": row.get("FullName", "Unknown"),
+        "team": row.get("TeamName", "Unknown"),
+    }
+
+
+def get_race_winner(race_results: pd.DataFrame):
+    if race_results.empty or "Position" not in race_results.columns:
+        return None
+
+    df = race_results.copy()
+    df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
+    df = df[df["Position"] == 1]
+
+    if df.empty:
+        return None
+
+    row = df.iloc[0]
+    return {
+        "driver": row.get("FullName", "Unknown"),
+        "team": row.get("TeamName", "Unknown"),
+        "points": row.get("Points", None),
+    }
+
+
+def get_biggest_gainer_and_loser(position_changes: pd.DataFrame):
+    if position_changes.empty:
+        return None, None
+
+    sorted_df = position_changes.sort_values("PositionsChanged", ascending=False).reset_index(drop=True)
+    gainer = sorted_df.iloc[0].to_dict()
+    loser = sorted_df.iloc[-1].to_dict()
+
+    return gainer, loser
