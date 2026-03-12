@@ -231,17 +231,12 @@ def build_position_delta(started, finished):
     except Exception:
         return "—"
 
-def get_quick_stats(race_results: pd.DataFrame, stint_data: pd.DataFrame):
-    drivers_count = 0
+def get_quick_stats(race_results: pd.DataFrame, stint_data: pd.DataFrame, changes: pd.DataFrame):
+    net_positions_gained = 0
     stints_count = 0
     classified_finishers = 0
 
     if race_results is not None and not race_results.empty:
-        if "Driver" in race_results.columns:
-            drivers_count = race_results["Driver"].nunique()
-        elif "FullName" in race_results.columns:
-            drivers_count = race_results["FullName"].nunique()
-
         if "Status" in race_results.columns:
             status_series = race_results["Status"].astype(str).str.lower()
             classified_finishers = status_series.str.contains("finished|lapped").sum()
@@ -249,8 +244,43 @@ def get_quick_stats(race_results: pd.DataFrame, stint_data: pd.DataFrame):
     if stint_data is not None and not stint_data.empty:
         stints_count = len(stint_data)
 
+    if changes is not None and not changes.empty and "PositionsChanged" in changes.columns:
+        positive_changes = pd.to_numeric(changes["PositionsChanged"], errors="coerce")
+        positive_changes = positive_changes[positive_changes > 0]
+        net_positions_gained = int(positive_changes.sum()) if not positive_changes.empty else 0
+
     return {
-        "drivers_count": int(drivers_count),
+        "net_positions_gained": int(net_positions_gained),
         "stints_count": int(stints_count),
         "classified_finishers": int(classified_finishers),
     }
+
+def estimate_overtakes_from_laps(laps: pd.DataFrame) -> int:
+    if laps is None or laps.empty:
+        return 0
+
+    needed_cols = {"Driver", "LapNumber", "Position"}
+    if not needed_cols.issubset(laps.columns):
+        return 0
+
+    df = laps[list(needed_cols)].copy()
+    df["LapNumber"] = pd.to_numeric(df["LapNumber"], errors="coerce")
+    df["Position"] = pd.to_numeric(df["Position"], errors="coerce")
+    df = df.dropna(subset=["Driver", "LapNumber", "Position"]).copy()
+
+    if df.empty:
+        return 0
+
+    df = df.sort_values(["Driver", "LapNumber"])
+
+    # zmiana pozycji kierowcy między okrążeniami
+    df["PrevPosition"] = df.groupby("Driver")["Position"].shift(1)
+    df["PosDelta"] = df["PrevPosition"] - df["Position"]
+
+    # tylko awanse o min. 1 pozycję
+    gains = df[df["PosDelta"] > 0]["PosDelta"].sum()
+
+    if pd.isna(gains):
+        return 0
+
+    return int(gains)

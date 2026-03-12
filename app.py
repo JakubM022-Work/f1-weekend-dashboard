@@ -16,6 +16,7 @@ from utils.analysis import (
     get_status_color,
     build_position_delta,
     get_quick_stats,
+    estimate_overtakes_from_laps,
 )
 from utils.charts import plot_stints
 
@@ -468,8 +469,7 @@ if st.sidebar.button("Załaduj dashboard"):
         pole_sitter = get_pole_sitter(quali_results)
         race_winner = get_race_winner(race_results)
         biggest_gainer, biggest_loser = get_biggest_gainer_and_loser(changes)
-        quick_stats = get_quick_stats(race_results, stint_data)
-
+        quick_stats = get_quick_stats(race_results, stint_data, changes)
         st.markdown(
             f"""
 <div class="hero-card">
@@ -484,8 +484,8 @@ if st.sidebar.button("Załaduj dashboard"):
     </p>
     <div class="quick-stats">
         <div class="quick-stat-card">
-            <div class="quick-stat-label">Drivers</div>
-            <div class="quick-stat-value">{quick_stats['drivers_count']}</div>
+            <div class="quick-stat-label">Net positions gained</div>
+            <div class="quick-stat-value">{quick_stats['net_positions_gained']}</div>
         </div>
         <div class="quick-stat-card">
             <div class="quick-stat-label">Stints</div>
