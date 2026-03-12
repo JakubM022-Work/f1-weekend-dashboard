@@ -12,6 +12,9 @@ from utils.analysis import (
     get_pole_sitter,
     get_race_winner,
     get_biggest_gainer_and_loser,
+    get_team_color,
+    get_status_color,
+    build_position_delta,
 )
 from utils.charts import plot_stints
 
@@ -104,7 +107,213 @@ st.markdown("""
         overflow: hidden;
     }
 </style>
+<style>
+    .ranking-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .ranking-card {
+        background: #0b1220;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 18px;
+        padding: 14px 16px;
+    }
+
+    .ranking-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+    }
+
+    .ranking-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+    }
+
+    .ranking-pos {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        background: #111827;
+        border: 1px solid rgba(255,255,255,0.08);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        color: #e5e7eb;
+        flex-shrink: 0;
+    }
+
+    .ranking-driver-block {
+        min-width: 0;
+    }
+
+    .ranking-driver {
+        font-weight: 700;
+        font-size: 0.98rem;
+        color: #f9fafb;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ranking-team {
+        font-size: 0.86rem;
+        color: #9ca3af;
+        margin-top: 4px;
+    }
+
+    .team-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        margin-right: 8px;
+        vertical-align: middle;
+    }
+
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        border: 1px solid rgba(255,255,255,0.08);
+        white-space: nowrap;
+    }
+
+    .pill-green {
+        background: rgba(22,163,74,0.15);
+        color: #4ADE80;
+    }
+
+    .pill-red {
+        background: rgba(220,38,38,0.15);
+        color: #F87171;
+    }
+
+    .pill-gray {
+        background: rgba(107,114,128,0.18);
+        color: #D1D5DB;
+    }
+
+    .pill-status {
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: white;
+        white-space: nowrap;
+    }
+
+    .two-col-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+    }
+
+    @media (max-width: 900px) {
+        .two-col-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
 """, unsafe_allow_html=True)
+
+def render_results_cards(df, title, mode="quali"):
+    if df.empty:
+        st.info("Brak danych do wyświetlenia.")
+        return
+
+    html = f'<div class="section-title">{title}</div><div class="ranking-list">'
+
+    for i, (_, row) in enumerate(df.iterrows(), start=1):
+        driver = row.get("Driver", "Unknown")
+        team = row.get("Team", "Unknown")
+        team_color = get_team_color(team)
+
+        if mode == "quali":
+            right_value = row.get("Q3") or row.get("Q2") or row.get("Q1") or "—"
+            right_html = f'<div class="pill pill-gray">{right_value}</div>'
+        else:
+            status = row.get("Status", "Unknown")
+            points = row.get("Points", "—")
+            status_color = get_status_color(status)
+            right_html = (
+                f'<div style="display:flex; gap:8px; align-items:center;">'
+                f'<div class="pill pill-gray">{points} pts</div>'
+                f'<div class="pill-status" style="background:{status_color};">{status}</div>'
+                f'</div>'
+            )
+
+        html += (
+            f'<div class="ranking-card">'
+            f'<div class="ranking-row">'
+            f'<div class="ranking-left">'
+            f'<div class="ranking-pos">{i}</div>'
+            f'<div class="ranking-driver-block">'
+            f'<div class="ranking-driver">{driver}</div>'
+            f'<div class="ranking-team"><span class="team-dot" style="background:{team_color};"></span>{team}</div>'
+            f'</div>'
+            f'</div>'
+            f'<div>{right_html}</div>'
+            f'</div>'
+            f'</div>'
+        )
+
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+def render_position_change_cards(df, title, positive=True):
+    if df.empty:
+        st.info("Brak danych do wyświetlenia.")
+        return
+
+    html = f'<div class="section-title">{title}</div><div class="ranking-list">'
+
+    for i, (_, row) in enumerate(df.iterrows(), start=1):
+        driver = row.get("Driver", "Unknown")
+        team = row.get("Team", "Unknown")
+        team_color = get_team_color(team)
+        delta = row.get("PositionsChanged", 0)
+
+        try:
+            delta_int = int(delta)
+        except Exception:
+            delta_int = 0
+
+        pill_class = "pill-green" if delta_int >= 0 else "pill-red"
+        delta_text = f"{delta_int:+d}"
+        move_text = build_position_delta(row.get("Started"), row.get("Finished"))
+
+        html += (
+            f'<div class="ranking-card">'
+            f'<div class="ranking-row">'
+            f'<div class="ranking-left">'
+            f'<div class="ranking-pos">{i}</div>'
+            f'<div class="ranking-driver-block">'
+            f'<div class="ranking-driver">{driver}</div>'
+            f'<div class="ranking-team"><span class="team-dot" style="background:{team_color};"></span>{team}</div>'
+            f'</div>'
+            f'</div>'
+            f'<div style="display:flex; gap:8px; align-items:center;">'
+            f'<div class="pill pill-gray">{move_text}</div>'
+            f'<div class="pill {pill_class}">{delta_text}</div>'
+            f'</div>'
+            f'</div>'
+            f'</div>'
+        )
+
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
 # =========================
 # Sidebar
@@ -246,39 +455,29 @@ if st.sidebar.button("Załaduj dashboard"):
             col1, col2 = st.columns(2)
 
             with col1:
-                st.markdown('<div class="section-title">Top 22 kwalifikacji</div>', unsafe_allow_html=True)
-                if not quali_top22.empty:
-                    st.dataframe(quali_top22, use_container_width=True, hide_index=True)
-                else:
-                    st.info("Brak danych kwalifikacji do wyświetlenia.")
+                render_results_cards(quali_top22, "Top kwalifikacji", mode="quali")
 
             with col2:
-                st.markdown('<div class="section-title">Top 22 wyścigu</div>', unsafe_allow_html=True)
-                if not race_top22.empty:
-                    st.dataframe(race_top22, use_container_width=True, hide_index=True)
-                else:
-                    st.info("Brak danych wyścigu do wyświetlenia.")
+                render_results_cards(race_top22, "Top wyścigu", mode="race")
 
             col3, col4 = st.columns(2)
 
             with col3:
-                st.markdown('<div class="section-title">Najwięcej zyskanych pozycji</div>', unsafe_allow_html=True)
                 if not changes.empty:
-                    st.dataframe(
+                    render_position_change_cards(
                         changes.sort_values("PositionsChanged", ascending=False).head(5),
-                        use_container_width=True,
-                        hide_index=True
+                        "Najwięcej zyskanych pozycji",
+                        positive=True
                     )
                 else:
                     st.info("Brak danych.")
 
             with col4:
-                st.markdown('<div class="section-title">Najwięcej straconych pozycji</div>', unsafe_allow_html=True)
                 if not changes.empty:
-                    st.dataframe(
+                    render_position_change_cards(
                         changes.sort_values("PositionsChanged", ascending=True).head(5),
-                        use_container_width=True,
-                        hide_index=True
+                        "Najwięcej straconych pozycji",
+                        positive=False
                     )
                 else:
                     st.info("Brak danych.")
