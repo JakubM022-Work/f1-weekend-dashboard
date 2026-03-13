@@ -284,3 +284,147 @@ def estimate_overtakes_from_laps(laps: pd.DataFrame) -> int:
         return 0
 
     return int(gains)
+
+def lap_time_to_seconds(value):
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, pd.Timedelta):
+        return value.total_seconds()
+    return None
+
+
+def filter_laps_for_degradation(
+    laps: pd.DataFrame,
+    selected_drivers: list[str],
+    selected_compound: str,
+    min_stint_length: int = 5,
+) -> pd.DataFrame:
+    if laps is None or laps.empty:
+        return pd.DataFrame()
+
+    df = laps.copy()
+
+    needed_cols = [
+        "Driver", "LapNumber", "LapTime", "Compound", "TyreLife",
+        "Stint", "IsAccurate", "TrackStatus", "PitInTime", "PitOutTime"
+    ]
+    existing_cols = [c for c in needed_cols if c in df.columns]
+    df = df[existing_cols].copy()
+
+    if "Driver" in df.columns:
+        df = df[df["Driver"].isin(selected_drivers)]
+
+    if "Compound" in df.columns:
+        df = df[df["Compound"].astype(str).str.upper() == selected_compound.upper()]
+
+    if "IsAccurate" in df.columns:
+        df = df[df["IsAccurate"] == True]
+
+    if "LapTime" in df.columns:
+        df = df[df["LapTime"].notna()]
+
+    if "PitInTime" in df.columns:
+        df = df[df["PitInTime"].isna()]
+
+    if "PitOutTime" in df.columns:
+        df = df[df["PitOutTime"].isna()]
+
+    if "TrackStatus" in df.columns:
+        # zostawiamy głównie normal green flag laps
+        df = df[df["TrackStatus"].astype(str).isin(["1", ""])] if not df.empty else df
+
+    if df.empty:
+        return pd.DataFrame()
+
+    df["LapTimeSeconds"] = df["LapTime"].apply(lap_time_to_seconds)
+    df = df[df["LapTimeSeconds"].notna()].copy()
+
+    df["LapNumber"] = pd.to_numeric(df["LapNumber"], errors="coerce")
+    df["Stint"] = pd.to_numeric(df["Stint"], errors="coerce")
+    df["TyreLife"] = pd.to_numeric(df["TyreLife"], errors="coerce")
+    df = df.dropna(subset=["LapNumber", "Stint"]).copy()
+
+    # zostaw tylko stinty o sensownej długości
+    stint_sizes = (
+        df.groupby(["Driver", "Stint"])
+        .size()
+        .reset_index(name="StintSize")
+    )
+
+    df = df.merge(stint_sizes, on=["Driver", "Stint"], how="left")
+    df = df[df["StintSize"] >= min_stint_length].copy()
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # numer okrążenia w obrębie stintu
+    df = df.sort_values(["Driver", "Stint", "LapNumber"]).copy()
+    df["LapInStint"] = df.groupby(["Driver", "Stint"]).cumcount() + 1
+
+    return df
+
+
+def summarize_degradation(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    summary_rows = []
+
+    for (driver, stint), group in df.groupby(["Driver", "Stint"]):
+        group = group.sort_values("LapInStint").copy()
+
+        if len(group) < 2:
+            continue
+
+        avg_pace = group["LapTimeSeconds"].mean()
+        first_lap = group["LapTimeSeconds"].iloc[0]
+        last_lap = group["LapTimeSeconds"].iloc[-1]
+        degradation_total = last_lap - first_lap
+        degradation_per_lap = degradation_total / max(len(group) - 1, 1)
+
+        compound = group["Compound"].iloc[0] if "Compound" in group.columns else "UNKNOWN"
+
+        summary_rows.append({
+            "Driver": driver,
+            "Stint": int(stint),
+            "Compound": compound,
+            "Laps": len(group),
+            "AvgPaceSeconds": avg_pace,
+            "FirstLapSeconds": first_lap,
+            "LastLapSeconds": last_lap,
+            "DegTotalSeconds": degradation_total,
+            "DegPerLapSeconds": degradation_per_lap,
+        })
+
+    return pd.DataFrame(summary_rows)
+
+
+def format_seconds_to_laptime(seconds):
+    if seconds is None or pd.isna(seconds):
+        return "—"
+
+    minutes = int(seconds // 60)
+    rem = seconds - minutes * 60
+    return f"{minutes}:{rem:06.3f}"
+
+
+def get_degradation_insight(summary_df: pd.DataFrame) -> str:
+    if summary_df is None or summary_df.empty:
+        return "Brak wystarczających danych do oceny degradacji opon."
+
+    best_deg = summary_df.sort_values("DegPerLapSeconds", ascending=True).iloc[0]
+    best_avg = summary_df.sort_values("AvgPaceSeconds", ascending=True).iloc[0]
+
+    if best_deg["Driver"] == best_avg["Driver"]:
+        return (
+            f"Najlepiej oponami zarządzał {best_deg['Driver']} — miał zarówno "
+            f"najniższą degradację ({best_deg['DegPerLapSeconds']:.3f}s/okr.), "
+            f"jak i najlepsze średnie tempo."
+        )
+
+    return (
+        f"Najmniejszą degradację miał {best_deg['Driver']} "
+        f"({best_deg['DegPerLapSeconds']:.3f}s/okr.), "
+        f"a najszybsze średnie tempo uzyskał {best_avg['Driver']} "
+        f"({format_seconds_to_laptime(best_avg['AvgPaceSeconds'])})."
+    )

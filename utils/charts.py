@@ -1,4 +1,5 @@
 import plotly.graph_objects as go
+import plotly.express as px
 
 
 def plot_stints(stints):
@@ -66,6 +67,41 @@ def plot_stints(stints):
             autorange="reversed",
             gridcolor="rgba(255,255,255,0.04)",
         ),
+    )
+
+    return fig
+
+def plot_tyre_degradation(df):
+    if df is None or df.empty:
+        return None
+
+    fig = px.line(
+        df,
+        x="LapInStint",
+        y="LapTimeSeconds",
+        color="Driver",
+        line_dash="Stint",
+        markers=True,
+        hover_data=["Driver", "Compound", "Stint", "LapNumber", "TyreLife"],
+    )
+
+    fig.update_layout(
+        height=520,
+        margin=dict(l=10, r=10, t=20, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#0b1220",
+        font=dict(color="#E5E7EB"),
+        xaxis=dict(
+            title="Lap in stint",
+            gridcolor="rgba(255,255,255,0.08)",
+            zeroline=False,
+        ),
+        yaxis=dict(
+            title="Lap time (s)",
+            gridcolor="rgba(255,255,255,0.08)",
+            zeroline=False,
+        ),
+        legend_title="Driver",
     )
 
     return fig

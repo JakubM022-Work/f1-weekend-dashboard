@@ -52,3 +52,26 @@ def load_race_laps(year: int, round_number: int) -> pd.DataFrame:
     wanted_cols = ["Driver", "Stint", "Compound", "LapNumber"]
     laps = safe_plain_df(race.laps, wanted_cols)
     return laps
+
+@st.cache_data(show_spinner=False)
+def load_race_laps_full(year: int, round_number: int) -> pd.DataFrame:
+    race = fastf1.get_session(year, round_number, "R")
+    race.load()
+
+    wanted_cols = [
+        "Driver",
+        "LapNumber",
+        "LapTime",
+        "Compound",
+        "TyreLife",
+        "Stint",
+        "IsAccurate",
+        "TrackStatus",
+        "PitInTime",
+        "PitOutTime",
+        "FreshTyre",
+        "Position",
+    ]
+
+    laps = safe_plain_df(race.laps, wanted_cols)
+    return laps

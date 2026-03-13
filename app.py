@@ -3,7 +3,12 @@ import pandas as pd
 import streamlit as st
 import fastf1
 
-from utils.loaders import get_event_schedule, load_session_results, load_race_laps
+from utils.loaders import (
+    get_event_schedule,
+    load_session_results,
+    load_race_laps,
+    load_race_laps_full,
+)
 from utils.analysis import (
     prepare_qualifying_top22,
     prepare_race_top22,
@@ -16,10 +21,12 @@ from utils.analysis import (
     get_status_color,
     build_position_delta,
     get_quick_stats,
-    estimate_overtakes_from_laps,
+    filter_laps_for_degradation,
+    summarize_degradation,
+    format_seconds_to_laptime,
+    get_degradation_insight,
 )
-from utils.charts import plot_stints
-
+from utils.charts import plot_stints, plot_tyre_degradation
 
 # =========================
 # Konfiguracja
@@ -460,6 +467,7 @@ if st.sidebar.button("Załaduj dashboard"):
             quali_results = load_session_results(season, round_number, "Q")
             race_results = load_session_results(season, round_number, "R")
             race_laps = load_race_laps(season, round_number)
+            race_laps_full = load_race_laps_full(season, round_number)
 
         quali_top22 = prepare_qualifying_top22(quali_results)
         race_top22 = prepare_race_top22(race_results)
@@ -557,8 +565,9 @@ if st.sidebar.button("Załaduj dashboard"):
                 unsafe_allow_html=True
             )
 
-        tab1, tab2, tab3, tab4 = st.tabs(["Podsumowanie", "Kwalifikacje", "Wyścig", "Stinty"])
-
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(
+            ["Podsumowanie", "Kwalifikacje", "Wyścig", "Stinty", "Degradacja opon"]
+        )
         with tab1:
             col1, col2 = st.columns(2)
 
@@ -628,6 +637,81 @@ if st.sidebar.button("Załaduj dashboard"):
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.info("Brak danych stintów do wyświetlenia.")
+        with tab5:
+            st.markdown('<div class="section-title">Analiza degradacji opon</div>', unsafe_allow_html=True)
+
+            available_drivers = sorted(race_laps_full["Driver"].dropna().unique().tolist()) if not race_laps_full.empty else []
+            available_compounds = ["SOFT", "MEDIUM", "HARD"]
+
+            col_a, col_b, col_c = st.columns([2, 1, 1])
+
+            with col_a:
+                selected_drivers = st.multiselect(
+                    "Wybierz kierowców",
+                    options=available_drivers,
+                    default=available_drivers[:2] if len(available_drivers) >= 2 else available_drivers,
+                    max_selections=3,
+                    key="deg_drivers"
+                )
+
+            with col_b:
+                selected_compound = st.selectbox(
+                    "Compound",
+                    options=available_compounds,
+                    index=1,
+                    key="deg_compound"
+                )
+
+            with col_c:
+                min_stint_length = st.selectbox(
+                    "Min. długość stintu",
+                    options=[3, 4, 5, 6, 7],
+                    index=2,
+                    key="deg_min_stint"
+                )
+
+            degradation_df = filter_laps_for_degradation(
+                race_laps_full,
+                selected_drivers,
+                selected_compound,
+                min_stint_length=min_stint_length,
+            )
+
+            if degradation_df.empty:
+                st.info("Brak danych spełniających wybrane kryteria.")
+            else:
+                deg_fig = plot_tyre_degradation(degradation_df)
+                if deg_fig is not None:
+                    st.plotly_chart(deg_fig, use_container_width=True, config={"displayModeBar": False})
+
+                degradation_summary = summarize_degradation(degradation_df)
+
+                if not degradation_summary.empty:
+                    display_summary = degradation_summary.copy()
+                    display_summary["Avg Pace"] = display_summary["AvgPaceSeconds"].apply(format_seconds_to_laptime)
+                    display_summary["First Lap"] = display_summary["FirstLapSeconds"].apply(format_seconds_to_laptime)
+                    display_summary["Last Lap"] = display_summary["LastLapSeconds"].apply(format_seconds_to_laptime)
+                    display_summary["Deg/Lap (s)"] = display_summary["DegPerLapSeconds"].round(3)
+
+                    display_summary = display_summary[
+                        ["Driver", "Stint", "Compound", "Laps", "Avg Pace", "First Lap", "Last Lap", "Deg/Lap (s)"]
+                    ]
+
+                    st.markdown('<div class="section-title">Podsumowanie stintów</div>', unsafe_allow_html=True)
+                    st.dataframe(display_summary, use_container_width=True, hide_index=True)
+
+                    insight = get_degradation_insight(degradation_summary)
+                    st.markdown(
+                        f"""
+                        <div class="metric-card" style="margin-top: 14px;">
+                            <div class="metric-label">Wniosek</div>
+                            <div class="metric-subvalue" style="font-size:1rem; color:#F3F4F6;">
+                                {insight}
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
     except Exception as e:
         st.error(f"Wystąpił błąd przy ładowaniu danych: {e}")
