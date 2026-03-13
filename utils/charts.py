@@ -69,6 +69,15 @@ def plot_tyre_degradation(df):
     if df is None or df.empty:
         return None
 
+    # mapa kierowca -> kolor teamu
+    driver_color_map = {}
+    if "Driver" in df.columns and "Team" in df.columns:
+        unique_driver_teams = df[["Driver", "Team"]].dropna().drop_duplicates()
+        for _, row in unique_driver_teams.iterrows():
+            team = row["Team"]
+            driver = row["Driver"]
+            driver_color_map[driver] = team and __import__("utils.config", fromlist=["TEAM_COLORS"]).TEAM_COLORS.get(team, "#9CA3AF")
+
     fig = px.line(
         df,
         x="LapInStint",
@@ -76,8 +85,23 @@ def plot_tyre_degradation(df):
         color="Driver",
         line_dash="Stint",
         markers=True,
-        hover_data=["Driver", "Compound", "Stint", "LapNumber", "TyreLife"],
+        hover_data=["Driver", "Team", "Compound", "Stint", "LapNumber", "TyreLife"],
+        color_discrete_map=driver_color_map if driver_color_map else None,
     )
+
+    # poprawa legendy: usuń ", 1.0" itd.
+    seen_drivers = set()
+    for trace in fig.data:
+        driver_name = str(trace.name).split(",")[0].strip()
+        trace.name = driver_name
+        trace.legendgroup = driver_name
+
+        # pokaż legendę tylko raz na kierowcę
+        if driver_name in seen_drivers:
+            trace.showlegend = False
+        else:
+            trace.showlegend = True
+            seen_drivers.add(driver_name)
 
     fig.update_layout(
         height=520,

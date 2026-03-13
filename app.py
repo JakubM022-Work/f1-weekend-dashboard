@@ -238,6 +238,15 @@ if st.session_state.dashboard_loaded:
                 min_stint_length=min_stint_length,
             )
 
+            driver_team_map = (
+                race_results[["Abbreviation", "TeamName"]]
+                .dropna()
+                .drop_duplicates()
+                .rename(columns={"Abbreviation": "Driver", "TeamName": "Team"})
+            )
+
+            degradation_df = degradation_df.merge(driver_team_map, on="Driver", how="left")
+
             if degradation_df.empty:
                 st.info("Brak danych spełniających wybrane kryteria.")
             else:
