@@ -461,13 +461,37 @@ except Exception as e:
 # =========================
 # Główna akcja
 # =========================
-if st.sidebar.button("Załaduj dashboard"):
+if "dashboard_loaded" not in st.session_state:
+    st.session_state.dashboard_loaded = False
+
+if "selected_season" not in st.session_state:
+    st.session_state.selected_season = None
+
+if "selected_round_number" not in st.session_state:
+    st.session_state.selected_round_number = None
+
+if "selected_event_name" not in st.session_state:
+    st.session_state.selected_event_name = None
+
+load_clicked = st.sidebar.button("Załaduj dashboard")
+
+if load_clicked:
+    st.session_state.dashboard_loaded = True
+    st.session_state.selected_season = season
+    st.session_state.selected_round_number = round_number
+    st.session_state.selected_event_name = event_name
+
+if st.session_state.dashboard_loaded:
     try:
+        active_season = st.session_state.selected_season
+        active_round_number = st.session_state.selected_round_number
+        active_event_name = st.session_state.selected_event_name
+
         with st.spinner("Ładowanie kwalifikacji, wyścigu i stintów..."):
-            quali_results = load_session_results(season, round_number, "Q")
-            race_results = load_session_results(season, round_number, "R")
-            race_laps = load_race_laps(season, round_number)
-            race_laps_full = load_race_laps_full(season, round_number)
+            quali_results = load_session_results(active_season, active_round_number, "Q")
+            race_results = load_session_results(active_season, active_round_number, "R")
+            race_laps = load_race_laps(active_season, active_round_number)
+            race_laps_full = load_race_laps_full(active_season, active_round_number)
 
         quali_top22 = prepare_qualifying_top22(quali_results)
         race_top22 = prepare_race_top22(race_results)
@@ -478,15 +502,16 @@ if st.sidebar.button("Załaduj dashboard"):
         race_winner = get_race_winner(race_results)
         biggest_gainer, biggest_loser = get_biggest_gainer_and_loser(changes)
         quick_stats = get_quick_stats(race_results, stint_data, changes)
+
         st.markdown(
             f"""
 <div class="hero-card">
     <div class="hero-topline">
-        <span class="hero-badge">🏁 Round {round_number}</span>
-        <span class="hero-badge">📍 {event_name}</span>
-        <span class="hero-badge">📅 {season}</span>
+        <span class="hero-badge">🏁 Round {active_round_number}</span>
+        <span class="hero-badge">📍 {active_event_name}</span>
+        <span class="hero-badge">📅 {active_season}</span>
     </div>
-    <div class="hero-title">{event_name} Dashboard</div>
+    <div class="hero-title">{active_event_name} Dashboard</div>
     <p class="hero-subtitle">
         Weekend overview: qualifying, race result, position changes and tyre strategies.
     </p>
@@ -568,6 +593,7 @@ if st.sidebar.button("Załaduj dashboard"):
         tab1, tab2, tab3, tab4, tab5 = st.tabs(
             ["Podsumowanie", "Kwalifikacje", "Wyścig", "Stinty", "Degradacja opon"]
         )
+
         with tab1:
             col1, col2 = st.columns(2)
 
@@ -637,6 +663,7 @@ if st.sidebar.button("Załaduj dashboard"):
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.info("Brak danych stintów do wyświetlenia.")
+
         with tab5:
             st.markdown('<div class="section-title">Analiza degradacji opon</div>', unsafe_allow_html=True)
 
