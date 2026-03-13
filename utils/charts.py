@@ -1,19 +1,13 @@
 import plotly.graph_objects as go
 import plotly.express as px
+from utils.config import TYRE_COLORS
 
 
 def plot_stints(stints):
     if stints.empty:
         return None
 
-    compound_colors = {
-        "SOFT": "#FF4D4D",
-        "MEDIUM": "#FFD54A",
-        "HARD": "#F5F5F5",
-        "INTERMEDIATE": "#43A047",
-        "WET": "#1E88E5",
-        "UNKNOWN": "#9CA3AF",
-    }
+    compound_colors = TYRE_COLORS
 
     drivers = list(stints["Driver"].drop_duplicates())
     fig = go.Figure()

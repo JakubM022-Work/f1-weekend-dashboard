@@ -1,4 +1,5 @@
 import pandas as pd
+from utils.config import TEAM_COLORS
 
 
 def format_timedelta(value):
@@ -190,22 +191,7 @@ def get_biggest_gainer_and_loser(position_changes: pd.DataFrame):
     return gainer, loser
 
 def get_team_color(team_name: str) -> str:
-    team_colors = {
-        "McLaren": "#FF8000",
-        "Ferrari": "#DC0000",
-        "Mercedes": "#00D2BE",
-        "Red Bull Racing": "#1E5BC6",
-        "Racing Bulls": "#6692FF",
-        "Williams": "#005AFF",
-        "Aston Martin": "#229971",
-        "Alpine": "#FF87BC",
-        "Haas F1 Team": "#B6BABD",
-        "Kick Sauber": "#52E252",
-        "Sauber": "#52E252",
-        "Audi": "#7A7A7A",
-        "Cadillac": "#A0A0A0",
-    }
-    return team_colors.get(team_name, "#6B7280")
+    return TEAM_COLORS.get(team_name, "#6B7280")
 
 
 def get_status_color(status: str) -> str:
