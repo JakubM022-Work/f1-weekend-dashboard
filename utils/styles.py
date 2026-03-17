@@ -125,6 +125,66 @@ DASHBOARD_STYLES = """
         color: #F9FAFB;
     }
 
+    .small-stat-card {
+        background: linear-gradient(180deg, rgba(17,24,39,0.96) 0%, rgba(11,18,32,0.98) 100%);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 18px;
+        padding: 16px 18px;
+        min-height: 96px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+    }
+
+    .small-stat-label {
+        font-size: 0.82rem;
+        color: #9CA3AF;
+        margin-bottom: 8px;
+    }
+
+    .small-stat-value {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #F9FAFB;
+        line-height: 1.2;
+    }
+
+    .small-stat-subtitle {
+        font-size: 0.88rem;
+        color: #D1D5DB;
+        margin-top: 6px;
+    }
+
+    .filters-card {
+        background: linear-gradient(180deg, rgba(17,24,39,0.96) 0%, rgba(11,18,32,0.98) 100%);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 20px;
+        padding: 18px 18px 8px 18px;
+        margin-bottom: 16px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+    }
+
+    .insight-card {
+        background:
+            radial-gradient(circle at top right, rgba(37,99,235,0.18), transparent 28%),
+            linear-gradient(135deg, #111827 0%, #0b1220 100%);
+        border: 1px solid rgba(96,165,250,0.18);
+        border-radius: 20px;
+        padding: 18px 20px;
+        margin-top: 14px;
+    }
+
+    .insight-title {
+        font-size: 0.88rem;
+        color: #93C5FD;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+
+    .insight-text {
+        font-size: 1rem;
+        color: #F3F4F6;
+        line-height: 1.55;
+    }
+
     .ranking-list {
         display: flex;
         flex-direction: column;

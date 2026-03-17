@@ -33,6 +33,8 @@ from utils.components import (
     render_hero_card,
     render_metric_card,
     render_tyre_compounds_legend,
+    render_small_stat_card,
+    render_degradation_summary_cards,
 )
 from utils.sidebar import init_session_state, render_sidebar
 from utils.config import (
@@ -230,6 +232,7 @@ if st.session_state.dashboard_loaded:
                     index=2,
                     key="deg_min_stint"
                 )
+            st.markdown("</div>", unsafe_allow_html=True)
 
             degradation_df = filter_laps_for_degradation(
                 race_laps_full,
@@ -250,34 +253,49 @@ if st.session_state.dashboard_loaded:
             if degradation_df.empty:
                 st.info("Brak danych spełniających wybrane kryteria.")
             else:
+                degradation_summary = summarize_degradation(degradation_df)
+
+                if not degradation_summary.empty:
+                    best_avg = degradation_summary.sort_values("AvgPaceSeconds").iloc[0]
+                    best_deg = degradation_summary.sort_values("DegPerLapSeconds").iloc[0]
+                    longest_stint = degradation_summary.sort_values("Laps", ascending=False).iloc[0]
+
+                    s1, s2, s3 = st.columns(3)
+
+                    with s1:
+                        render_small_stat_card(
+                            "Best avg pace",
+                            str(best_avg["Driver"]),
+                            format_seconds_to_laptime(best_avg["AvgPaceSeconds"])
+                        )
+
+                    with s2:
+                        render_small_stat_card(
+                            "Lowest degradation",
+                            str(best_deg["Driver"]),
+                            f'{best_deg["DegPerLapSeconds"]:.3f} s/lap'
+                        )
+
+                    with s3:
+                        render_small_stat_card(
+                            "Longest stint",
+                            str(longest_stint["Driver"]),
+                            f'{int(longest_stint["Laps"])} laps'
+                        )
+
                 deg_fig = plot_tyre_degradation(degradation_df)
                 if deg_fig is not None:
                     st.plotly_chart(deg_fig, use_container_width=True, config={"displayModeBar": False})
 
-                degradation_summary = summarize_degradation(degradation_df)
-
                 if not degradation_summary.empty:
-                    display_summary = degradation_summary.copy()
-                    display_summary["Avg Pace"] = display_summary["AvgPaceSeconds"].apply(format_seconds_to_laptime)
-                    display_summary["First Lap"] = display_summary["FirstLapSeconds"].apply(format_seconds_to_laptime)
-                    display_summary["Last Lap"] = display_summary["LastLapSeconds"].apply(format_seconds_to_laptime)
-                    display_summary["Deg/Lap (s)"] = display_summary["DegPerLapSeconds"].round(3)
-
-                    display_summary = display_summary[
-                        ["Driver", "Stint", "Compound", "Laps", "Avg Pace", "First Lap", "Last Lap", "Deg/Lap (s)"]
-                    ]
-
-                    st.markdown("### Podsumowanie Stintów")
-                    st.dataframe(display_summary, use_container_width=True, hide_index=True)
+                    render_degradation_summary_cards(degradation_summary, format_seconds_to_laptime)
 
                     insight = get_degradation_insight(degradation_summary)
                     st.markdown(
                         f"""
-                        <div class="metric-card" style="margin-top: 14px;">
-                            <div class="metric-label">Wniosek</div>
-                            <div class="metric-subvalue" style="font-size:1rem; color:#F3F4F6;">
-                                {insight}
-                            </div>
+                        <div class="insight-card">
+                            <div class="insight-title">Wniosek analityczny</div>
+                            <div class="insight-text">{insight}</div>
                         </div>
                         """,
                         unsafe_allow_html=True

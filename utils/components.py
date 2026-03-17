@@ -151,3 +151,56 @@ def render_tyre_compounds_legend():
         <span style="background:#1E88E5; color:white; padding:6px 10px; border-radius:999px; font-weight:700;">Wet</span>
     </div>
     """, unsafe_allow_html=True)
+
+def render_small_stat_card(label: str, value: str, subtitle: str = ""):
+
+    st.markdown(
+        f"""
+        <div class="small-stat-card">
+            <div class="small-stat-label">{label}</div>
+            <div class="small-stat-value">{value}</div>
+            <div class="small-stat-subtitle">{subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+def render_degradation_summary_cards(summary_df, format_seconds_to_laptime):
+
+    if summary_df is None or summary_df.empty:
+        st.info("Brak danych do wyświetlenia.")
+        return
+
+    html = '<div class="section-title">Podsumowanie stintów</div><div class="ranking-list">'
+
+    for _, row in summary_df.iterrows():
+        driver = row.get("Driver", "Unknown")
+        compound = row.get("Compound", "Unknown")
+        stint = int(row.get("Stint", 0))
+        laps = int(row.get("Laps", 0))
+        avg_pace = format_seconds_to_laptime(row.get("AvgPaceSeconds"))
+        first_lap = format_seconds_to_laptime(row.get("FirstLapSeconds"))
+        last_lap = format_seconds_to_laptime(row.get("LastLapSeconds"))
+        deg_per_lap = row.get("DegPerLapSeconds", 0)
+
+        html += (
+            f'<div class="ranking-card">'
+            f'<div class="ranking-row">'
+            f'<div class="ranking-left">'
+            f'<div class="ranking-driver-block">'
+            f'<div class="ranking-driver">{driver} • {compound} • Stint {stint}</div>'
+            f'<div class="ranking-team">{laps} laps</div>'
+            f'</div>'
+            f'</div>'
+            f'<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">'
+            f'<div class="pill pill-gray">Avg {avg_pace}</div>'
+            f'<div class="pill pill-gray">First {first_lap}</div>'
+            f'<div class="pill pill-gray">Last {last_lap}</div>'
+            f'<div class="pill {"pill-green" if deg_per_lap <= 0 else "pill-red"}">{deg_per_lap:.3f}s/lap</div>'
+            f'</div>'
+            f'</div>'
+            f'</div>'
+        )
+
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
