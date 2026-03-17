@@ -8,6 +8,11 @@ from utils.loaders import (
     load_session_results,
     load_race_laps,
     load_race_laps_full,
+    load_car_data_for_lap,
+    get_fastest_lap,
+    load_drivers_for_session,
+    load_session_with_telemetry,
+    get_car_data_from_lap,
 )
 from utils.analysis import (
     prepare_qualifying_top22,
@@ -23,7 +28,8 @@ from utils.analysis import (
     format_seconds_to_laptime,
     get_degradation_insight,
 )
-from utils.charts import plot_stints, plot_tyre_degradation
+from utils.telemetry_viz import plot_telemetry_vs_distance
+from utils.charts import plot_stints, plot_tyre_degradation, plot_track_map, plot_sector_analysis, plot_comparison_lap_time
 
 # Importy z refactorowanych modułów
 from utils.styles import DASHBOARD_STYLES
@@ -135,8 +141,8 @@ if st.session_state.dashboard_loaded:
             )
 
         # Tabs z zawartością
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(
-            ["Podsumowanie", "Kwalifikacje", "Wyścig", "Stinty", "Degradacja opon"]
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+            ["Podsumowanie", "Kwalifikacje", "Wyścig", "Stinty", "Degradacja opon", "📍 Telemetria Toru"]
         )
 
         with tab1:
@@ -204,8 +210,14 @@ if st.session_state.dashboard_loaded:
         with tab5:
             st.markdown("### Analiza Degradacji Opon")
 
-            available_drivers = sorted(race_laps_full["Driver"].dropna().unique().tolist()) if not race_laps_full.empty else []
-
+            # Obsługa fallback - jeśli nie ma "Driver" w race_laps_full, użyj race_results
+            if not race_laps_full.empty and "Driver" in race_laps_full.columns:
+                available_drivers = sorted(race_laps_full["Driver"].dropna().unique().tolist())
+            elif not race_results.empty and "Abbreviation" in race_results.columns:
+                available_drivers = sorted(race_results["Abbreviation"].dropna().unique().tolist())
+            else:
+                available_drivers = []
+            
             col_a, col_b, col_c = st.columns([2, 1, 1])
 
             with col_a:
@@ -300,6 +312,280 @@ if st.session_state.dashboard_loaded:
                         """,
                         unsafe_allow_html=True
                     )
+
+        with tab6:
+            st.markdown("### 📍 Mapa Toru z Telemetrią")
+            st.caption("Wizualizacja ścieżki jazdy kierowcy na torze z kolorowaniem zależnie od wybranej metryki (prędkość, throttle, hamulce).")
+
+            try:
+                # Selektor sesji i kierowcy
+                col_session, col_driver, col_metric = st.columns(3)
+
+                with col_session:
+                    session_type = st.selectbox(
+                        "Sesja",
+                        options=["Race", "Qualifying"],
+                        index=0,
+                        key="telemetry_session"
+                    )
+                    session_code = "R" if session_type == "Race" else "Q"
+
+                with col_driver:
+                    available_drivers_telemetry = load_drivers_for_session(active_season, active_round_number, session_code)
+                    
+                    if not available_drivers_telemetry:
+                        st.warning(f"Brak kierowców dla sesji {session_type}")
+                        selected_driver = None
+                    else:
+                        selected_driver = st.selectbox(
+                            "Kierowca",
+                            options=available_drivers_telemetry,
+                            key="telemetry_driver"
+                        )
+
+                with col_metric:
+                    metric_choice = st.selectbox(
+                        "Metryka kolorowania",
+                        options=["Speed", "Throttle", "Brake"],
+                        index=0,
+                        key="telemetry_metric"
+                    )
+
+                # Selektor okrążenia
+                if selected_driver:
+                    st.markdown("---")
+                    
+                    # Załaduj sesję z telemetrią
+                    with st.spinner(f"Ładuję sesję {session_type} z telemetrią..."):
+                        session_tel = load_session_with_telemetry(active_season, active_round_number, session_code)
+                    
+                    print(f"\n[APP] session_tel type: {type(session_tel)}")
+                    print(f"[APP] session_tel: {session_tel}")
+                    
+                    if session_tel is None:
+                        st.error("❌ Nie udało się załadować sesji z telemetrią.")
+                    else:
+                        # Pobranie lapów dla kierowcy
+                        try:
+                            driver_laps = session_tel.laps.pick_driver(selected_driver)
+                            print(f"[APP] driver_laps from pick_driver: {len(driver_laps)} laps")
+                        except Exception as e:
+                            print(f"[APP] pick_driver failed: {e}, trying fallback")
+                            driver_laps = session_tel.laps[session_tel.laps["Driver"] == selected_driver]
+                            print(f"[APP] driver_laps from fallback: {len(driver_laps)} laps")
+                        
+                        if not driver_laps.empty:
+                            # Wszystkie lapy kierowcy
+                            all_lap_numbers = sorted(driver_laps["LapNumber"].dropna().astype(int).unique().tolist())
+                            
+                            print(f"[APP] All lap numbers for {selected_driver}: {all_lap_numbers}")
+                            st.write(f"Dostępne okrążenia: {len(all_lap_numbers)}")
+                            
+                            # Najszybszy lap
+                            accurate_laps = driver_laps[driver_laps["IsAccurate"] == True] if "IsAccurate" in driver_laps.columns else driver_laps
+                            if len(accurate_laps) > 0:
+                                fastest = accurate_laps.sort_values("LapTime").iloc[0]
+                                fastest_lap_num = int(fastest["LapNumber"])
+                                st.markdown(f"**Najszybsze okrążenie: #{fastest_lap_num}**")
+                            
+                            st.write("Wybierz okrążenie:")
+                            selected_lap = st.select_slider(
+                                "Numer okrążenia",
+                                options=all_lap_numbers,
+                                value=all_lap_numbers[-1] if all_lap_numbers else 1,
+                                key="telemetry_lap"
+                            )
+                            
+                            # Pobierz dane dla wybranego lapa
+                            st.write("---")
+                            
+                            with st.spinner(f"Ładuję telemetrię dla okrążenia {selected_lap}..."):
+                                selected_lap_obj = driver_laps[driver_laps["LapNumber"] == selected_lap]
+                                
+                                if not selected_lap_obj.empty:
+                                    selected_lap_obj = selected_lap_obj.iloc[0]
+                                    car_data = get_car_data_from_lap(selected_lap_obj)
+                                    
+                                    if car_data is not None and len(car_data) > 0:
+                                        # DEBUG: Sprawdzenie kolumn
+                                        print(f"\n[APP] car_data shape: {car_data.shape}")
+                                        print(f"[APP] car_data columns: {list(car_data.columns)}")
+                                        print(f"[APP] car_data dtypes:\n{car_data.dtypes}")
+                                        print(f"[APP] Has X?Y?: X={('X' in car_data.columns)}, Y={('Y' in car_data.columns)}")
+                                        
+                                        # Rysowanie track map
+                                        track_fig = plot_track_map(car_data, metric=metric_choice, driver_name=selected_driver, lap_number=selected_lap)
+                                        
+                                        if track_fig is None:
+                                            # Fallback: użyj visualization bez track position (X,Y)
+                                            print(f"[APP] Track map failed, trying fallback visualization...")
+                                            st.info("📈 Wyświetlam profil telemetrii (Track position data niedostępne)")
+                                            track_fig = plot_telemetry_vs_distance(car_data, metric=metric_choice, driver_name=selected_driver, lap_number=selected_lap)
+                                        
+                                        if track_fig is not None:
+                                            st.plotly_chart(track_fig, use_container_width=True, config={"displayModeBar": False})
+                                        else:
+                                            st.error("Nie udało się wygenerować żadnej wizualizacji telemetrii.")
+                                        
+                                        # Statystyki
+                                        if "Speed" in car_data.columns:
+                                            col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+                                            
+                                            with col_stat1:
+                                                max_speed = car_data["Speed"].max()
+                                                avg_speed = car_data["Speed"].mean()
+                                                st.metric("Max speed", f"{max_speed:.1f} km/h")
+                                            
+                                            with col_stat2:
+                                                st.metric("Avg speed", f"{avg_speed:.1f} km/h")
+                                            
+                                            with col_stat3:
+                                                if "Throttle" in car_data.columns:
+                                                    avg_throttle = car_data["Throttle"].mean()
+                                                    st.metric("Avg throttle", f"{avg_throttle:.0f}%")
+                                                else:
+                                                    st.metric("Throttle", "N/A")
+                                            
+                                            with col_stat4:
+                                                if "Brake" in car_data.columns:
+                                                    avg_brake = car_data["Brake"].mean()
+                                                    st.metric("Avg brake", f"{avg_brake:.0f}%")
+                                                else:
+                                                    st.metric("Brake", "N/A")
+                                        
+                                        # Lap time
+                                        if "LapTime" in selected_lap_obj.index:
+                                            try:
+                                                lap_time = selected_lap_obj["LapTime"]
+                                                st.markdown(f"**Lap Time:** `{lap_time}`")
+                                            except:
+                                                pass
+                                        
+                                        # ULEPSZENIE 1: Sector Analysis
+                                        st.markdown("---")
+                                        st.markdown("### 📊 Sector Analysis")
+                                        sector_fig = plot_sector_analysis(selected_lap_obj, driver_name=selected_driver, lap_number=selected_lap)
+                                        if sector_fig is not None:
+                                            st.plotly_chart(sector_fig, use_container_width=True, config={"displayModeBar": False})
+                                        
+                                        # ULEPSZENIE 2: Lap Comparison
+                                        st.markdown("---")
+                                        st.markdown("### 🏁 Lap Comparison")
+                                        
+                                        col_compare1, col_compare2 = st.columns(2)
+                                        with col_compare1:
+                                            st.write("**Porównaj z:**")
+                                            compare_lap = st.selectbox(
+                                                "Wybierz okrążenie do porównania",
+                                                options=[l for l in all_lap_numbers if l != selected_lap],
+                                                key="compare_lap"
+                                            )
+                                        
+                                        if compare_lap:
+                                            with st.spinner(f"Ładuję dane porównawcze dla okrążenia {compare_lap}..."):
+                                                compare_lap_obj = driver_laps[driver_laps["LapNumber"] == compare_lap]
+                                                if not compare_lap_obj.empty:
+                                                    compare_lap_obj = compare_lap_obj.iloc[0]
+                                                    compare_car_data = get_car_data_from_lap(compare_lap_obj)
+                                                    
+                                                    if compare_car_data is not None and len(compare_car_data) > 0:
+                                                        # Porównanie speed profile
+                                                        comparison_fig = plot_comparison_lap_time(
+                                                            car_data, 
+                                                            compare_car_data,
+                                                            driver_name=selected_driver,
+                                                            lap1_num=selected_lap,
+                                                            lap2_num=compare_lap
+                                                        )
+                                                        if comparison_fig is not None:
+                                                            st.plotly_chart(comparison_fig, use_container_width=True, config={"displayModeBar": False})
+                                                        
+                                                        # Mini delta summary
+                                                        col_delta1, col_delta2, col_delta3 = st.columns(3)
+                                                        with col_delta1:
+                                                            if "Speed" in car_data.columns and "Speed" in compare_car_data.columns:
+                                                                delta_speed = (car_data["Speed"].mean() - compare_car_data["Speed"].mean())
+                                                                delta_color = "🟢" if delta_speed > 0 else "🔴" if delta_speed < 0 else "⚪"
+                                                                st.metric(f"Avg Speed Delta {delta_color}", f"{delta_speed:+.1f} km/h")
+                                                        
+                                                        with col_delta2:
+                                                            if "Throttle" in car_data.columns and "Throttle" in compare_car_data.columns:
+                                                                delta_throttle = car_data["Throttle"].mean() - compare_car_data["Throttle"].mean()
+                                                                st.metric("Avg Throttle Delta", f"{delta_throttle:+.0f}%")
+                                                        
+                                                        with col_delta3:
+                                                            if "Brake" in car_data.columns and "Brake" in compare_car_data.columns:
+                                                                delta_brake = car_data["Brake"].mean() - compare_car_data["Brake"].mean()
+                                                                st.metric("Avg Brake Delta", f"{delta_brake:+.0f}%")
+                                    else:
+                                        # Fallback - szukaj pierwszego lapa z dostępnymi danymi
+                                        st.warning(f"Okrążenie {selected_lap} nie ma danych telemetrycznych. Szukam alternatywy...")
+                                        
+                                        found_data = False
+                                        for lap_num in reversed(all_lap_numbers):
+                                            if lap_num == selected_lap:
+                                                continue
+                                            try:
+                                                temp_lap = driver_laps[driver_laps["LapNumber"] == lap_num]
+                                                if not temp_lap.empty:
+                                                    temp_lap = temp_lap.iloc[0]
+                                                    temp_data = get_car_data_from_lap(temp_lap)
+                                                    if temp_data is not None and len(temp_data) > 0:
+                                                        st.info(f"✅ Wyświetlam okrążenie #{lap_num} (ma dostępne dane)")
+                                                        car_data = temp_data
+                                                        selected_lap = lap_num
+                                                        found_data = True
+                                                        break
+                                            except:
+                                                continue
+                                        
+                                        if found_data and car_data is not None:
+                                            # Rysowanie track map
+                                            track_fig = plot_track_map(car_data, metric=metric_choice, driver_name=selected_driver, lap_number=selected_lap)
+                                            
+                                            if track_fig is not None:
+                                                st.plotly_chart(track_fig, use_container_width=True, config={"displayModeBar": False})
+                                            else:
+                                                st.error("Nie udało się wygenerować mapy toru.")
+                                            
+                                            # Statystyki
+                                            if "Speed" in car_data.columns:
+                                                col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+                                                
+                                                with col_stat1:
+                                                    max_speed = car_data["Speed"].max()
+                                                    avg_speed = car_data["Speed"].mean()
+                                                    st.metric("Max speed", f"{max_speed:.1f} km/h")
+                                                
+                                                with col_stat2:
+                                                    st.metric("Avg speed", f"{avg_speed:.1f} km/h")
+                                                
+                                                with col_stat3:
+                                                    if "Throttle" in car_data.columns:
+                                                        avg_throttle = car_data["Throttle"].mean()
+                                                        st.metric("Avg throttle", f"{avg_throttle:.0f}%")
+                                                    else:
+                                                        st.metric("Throttle", "N/A")
+                                                
+                                                with col_stat4:
+                                                    if "Brake" in car_data.columns:
+                                                        avg_brake = car_data["Brake"].mean()
+                                                        st.metric("Avg brake", f"{avg_brake:.0f}%")
+                                                    else:
+                                                        st.metric("Brake", "N/A")
+                                        else:
+                                            st.error(f"❌ Brak danych telemetrycznych dla żadnego okrążenia kierowcy {selected_driver}")
+                                else:
+                                    st.error(f"Okrążenie {selected_lap} nie zostało znalezione.")
+                        else:
+                            st.error(f"Brak okrążeń dla kierowcy {selected_driver}")
+                else:
+                    st.info("Wybierz kierowcę aby wyświetlić telemetrię.")
+            
+            except Exception as e:
+                st.error(f"Błąd w zakładce Telemetria Toru: {str(e)}")
+                import traceback
+                st.write(traceback.format_exc())
 
     except Exception as e:
         st.error(f"Wystąpił błąd przy ładowaniu danych: {e}")
